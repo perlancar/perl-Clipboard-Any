@@ -19,10 +19,10 @@ my $sch_clipboard_manager = ['str', in=>$known_clipboard_managers];
 our %arg_clipboard_manager = (
     clipboard_manager => {
         summary => 'Explicitly set clipboard manager to use',
-        schema => $sch_screensaver,
+        schema => $sch_clipboard_manager,
         description => <<'_',
 
-The default, when left undef, is to detect what clipboard manager is running,
+The default, when left undef, is to detect what clipboard manager is running.
 
 _
     },
@@ -106,7 +106,10 @@ sub clear_clipboard_history {
         unless $clipboard_manager;
 
     if ($clipboard_manager eq 'klipper') {
-        system "qdbus", "org.kde.klipper", "/klipper", "clearClipboardHistory";
+        my ($stdout, $stderr);
+        # qdbus likes to emit an empty line
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "qdbus", "org.kde.klipper", "/klipper", "clearClipboardHistory");
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's clearClipboardHistory failed: $exit_code"] if $exit_code;
         return [200, "OK"];
@@ -117,13 +120,12 @@ sub clear_clipboard_history {
 
 $SPEC{'get_clipboard_content'} = {
     v => 1.1,
-    summary => 'Get the content of the current (most recent) item, a.k.a. history item [0]',
+    summary => 'Get the clipboard content (most recent, history index [0])',
     description => <<'_',
 
-Caveats for klipper: non-text content (e.g. image) is not retrievable by
-/klipper's getClipboardContents. If the current item is a non-text content, the
-most-recent item in the history is returned or empty string is returned if none
-exists.
+Caveats for klipper: Non-text item is not retrievable by getClipboardContents().
+If the current item is e.g. an image, then the next text item from history will
+be returned instead, or empty string if none exists.
 
 _
     result => {
@@ -143,10 +145,68 @@ sub get_clipboard_content {
                "qdbus", "org.kde.klipper", "/klipper", "getClipboardContents");
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's getClipboardContents failed: $exit_code"] if $exit_code;
+        chomp $stdout;
         return [200, "OK", $stdout];
     }
 
-    [412, "Cannot clear clipboard history (clipboard manager=$clipboard_manager)"];
+    [412, "Cannot get clipboard content (clipboard manager=$clipboard_manager)"];
+}
+
+$SPEC{'list_clipboard_history'} = {
+    v => 1.1,
+    summary => 'List the clipboard history',
+    description => <<'_',
+
+Caveats for klipper: 1) Klipper does not provide method to get the length of
+history. So we retrieve history item one by one using getClipboardHistoryItem(i)
+from i=0, i=1, and so on. And assume that if we get two consecutive empty
+string, it means we reach the end of the clipboard history before the first
+empty result.
+
+2) Non-text items are not retrievable by getClipboardHistoryItem().
+
+_
+    result => {
+        schema => $sch_clipboard_manager,
+    },
+};
+sub list_clipboard_history {
+    my %args = @_;
+
+    my $clipboard_manager = $args{clipboard_manager} // detect_clipboard_manager();
+    return [412, "Can't detect any known clipboard manager"]
+        unless $clipboard_manager;
+
+    if ($clipboard_manager eq 'klipper') {
+        my @rows;
+        my $i = 0;
+        my $got_empty;
+        while (1) {
+            my ($stdout, $stderr);
+            system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "qdbus", "org.kde.klipper", "/klipper", "getClipboardHistoryItem", $i);
+            my $exit_code = $? < 0 ? $? : $?>>8;
+            return [500, "/klipper's getClipboardHistoryItem($i) failed: $exit_code"] if $exit_code;
+            chomp $stdout;
+            if ($stdout eq '') {
+                log_trace "Got empty result";
+                if ($got_empty++) {
+                    pop @rows;
+                    last;
+                } else {
+                    push @rows, $stdout;
+                }
+            } else {
+                log_trace "Got result '%s'", $stdout;
+                $got_empty = 0;
+                push @rows, $stdout;
+            }
+            $i++;
+        }
+        return [200, "OK", \@rows];
+    }
+
+    [412, "Cannot list clipboard history (clipboard manager=$clipboard_manager)"];
 }
 
 1;
@@ -177,6 +237,4 @@ on.
 
 =head1 NOTES
 
-On my system (KDE Plasma 5.12.9 on Linux), /klipper object's
-getClipboardHistoryItem() does not clear the current clipboard content. So I'm
-currently not providing a clear_clipboard_content function.
+2021-07-15 - Tested on my system (KDE Plasma 5.12.9 on Linux).
