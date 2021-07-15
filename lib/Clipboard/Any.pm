@@ -16,7 +16,7 @@ use IPC::System::Options 'system', 'readpipe', -log=>1;
 
 my $known_clipboard_managers = [qw/klipper/];
 my $sch_clipboard_manager = ['str', in=>$known_clipboard_managers];
-our %arg_clipboard_manager = (
+our %argspecopt_clipboard_manager = (
     clipboard_manager => {
         summary => 'Explicitly set clipboard manager to use',
         schema => $sch_clipboard_manager,
@@ -94,6 +94,9 @@ $SPEC{'clear_clipboard_history'} = {
     description => <<'_',
 
 _
+    args => {
+        %argspecopt_clipboard_manager,
+    },
     result => {
         schema => $sch_clipboard_manager,
     },
@@ -128,6 +131,9 @@ If the current item is e.g. an image, then the next text item from history will
 be returned instead, or empty string if none exists.
 
 _
+    args => {
+        %argspecopt_clipboard_manager,
+    },
     result => {
         schema => $sch_clipboard_manager,
     },
@@ -166,6 +172,9 @@ empty result.
 2) Non-text items are not retrievable by getClipboardHistoryItem().
 
 _
+    args => {
+        %argspecopt_clipboard_manager,
+    },
     result => {
         schema => $sch_clipboard_manager,
     },
