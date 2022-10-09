@@ -1,10 +1,5 @@
 package Clipboard::Any;
 
-# AUTHORITY
-# DATE
-# DIST
-# VERSION
-
 use 5.010001;
 use strict;
 use warnings;
@@ -13,6 +8,11 @@ use Log::ger;
 use Exporter::Rinci qw(import);
 use File::Which qw(which);
 use IPC::System::Options 'system', 'readpipe', -log=>1;
+
+# AUTHORITY
+# DATE
+# DIST
+# VERSION
 
 my $known_clipboard_managers = [qw/klipper/];
 my $sch_clipboard_manager = ['str', in=>$known_clipboard_managers];
@@ -121,6 +121,39 @@ sub clear_clipboard_history {
     [412, "Cannot clear clipboard history (clipboard manager=$clipboard_manager)"];
 }
 
+$SPEC{'clear_clipboard_content'} = {
+    v => 1.1,
+    summary => 'Delete current clipboard content',
+    description => <<'_',
+
+_
+    args => {
+        %argspecopt_clipboard_manager,
+    },
+    result => {
+        schema => $sch_clipboard_manager,
+    },
+};
+sub clear_clipboard_content {
+    my %args = @_;
+
+    my $clipboard_manager = $args{clipboard_manager} // detect_clipboard_manager();
+    return [412, "Can't detect any known clipboard manager"]
+        unless $clipboard_manager;
+
+    if ($clipboard_manager eq 'klipper') {
+        my ($stdout, $stderr);
+        # qdbus likes to emit an empty line
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "qdbus", "org.kde.klipper", "/klipper", "clearClipboardContents");
+        my $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "/klipper's clearClipboardContents failed: $exit_code"] if $exit_code;
+        return [200, "OK"];
+    }
+
+    [412, "Cannot clear clipboard content (clipboard manager=$clipboard_manager)"];
+}
+
 $SPEC{'get_clipboard_content'} = {
     v => 1.1,
     summary => 'Get the clipboard content (most recent, history index [0])',
@@ -216,6 +249,40 @@ sub list_clipboard_history {
     }
 
     [412, "Cannot list clipboard history (clipboard manager=$clipboard_manager)"];
+}
+
+$SPEC{'add_clipboard_content'} = {
+    v => 1.1,
+    summary => 'Add a new content to the clipboard',
+    description => <<'_',
+
+_
+    args => {
+        %argspecopt_clipboard_manager,
+        content => {schema => 'str*', req=>1, pos=>0},
+    },
+    result => {
+        schema => $sch_clipboard_manager,
+    },
+};
+sub add_clipboard_content {
+    my %args = @_;
+
+    my $clipboard_manager = $args{clipboard_manager} // detect_clipboard_manager();
+    return [412, "Can't detect any known clipboard manager"]
+        unless $clipboard_manager;
+
+    if ($clipboard_manager eq 'klipper') {
+        my ($stdout, $stderr);
+        # qdbus likes to emit an empty line
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "qdbus", "org.kde.klipper", "/klipper", "setClipboardContents", $args{content});
+        my $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "/klipper's setClipboardContents failed: $exit_code"] if $exit_code;
+        return [200, "OK"];
+    }
+
+    [412, "Cannot add clipboard content (clipboard manager=$clipboard_manager)"];
 }
 
 1;
