@@ -259,7 +259,7 @@ $SPEC{'add_clipboard_content'} = {
 _
     args => {
         %argspecopt_clipboard_manager,
-        content => {schema => 'str*', req=>1, pos=>0},
+        content => {schema => 'str*', pos=>0, cmdline_src=>'stdin_or_args'},
     },
     result => {
         schema => $sch_clipboard_manager,
@@ -271,6 +271,9 @@ sub add_clipboard_content {
     my $clipboard_manager = $args{clipboard_manager} // detect_clipboard_manager();
     return [412, "Can't detect any known clipboard manager"]
         unless $clipboard_manager;
+
+    defined $args{content} or
+        return [400, "Please specify content"];
 
     if ($clipboard_manager eq 'klipper') {
         my ($stdout, $stderr);
