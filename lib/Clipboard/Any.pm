@@ -161,6 +161,15 @@ _
     args => {
         %argspecopt_clipboard_manager,
     },
+    examples => [
+        {
+            summary => 'Munge text (remove duplicate spaces) in clipboard',
+            src_plang => 'bash',
+            src => q{[[prog]] | perl -lpe's/ {2,}/ /g' | clipadd},
+            test => 0,
+            'x.doc.show_result' => 0,
+        },
+    ],
 };
 sub get_clipboard_content {
     my %args = @_;
@@ -249,6 +258,15 @@ _
         %argspecopt_clipboard_manager,
         content => {schema => 'str*', pos=>0, cmdline_src=>'stdin_or_args'},
     },
+    examples => [
+        {
+            summary => 'Munge text (remove duplicate spaces) in clipboard',
+            src_plang => 'bash',
+            src => q{clipget | perl -lpe's/ {2,}/ /g' | [[prog]]},
+            test => 0,
+            'x.doc.show_result' => 0,
+        },
+    ],
 };
 sub add_clipboard_content {
     my %args = @_;
