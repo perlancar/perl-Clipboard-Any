@@ -97,9 +97,6 @@ _
     args => {
         %argspecopt_clipboard_manager,
     },
-    result => {
-        schema => $sch_clipboard_manager,
-    },
 };
 sub clear_clipboard_history {
     my %args = @_;
@@ -129,9 +126,6 @@ $SPEC{'clear_clipboard_content'} = {
 _
     args => {
         %argspecopt_clipboard_manager,
-    },
-    result => {
-        schema => $sch_clipboard_manager,
     },
 };
 sub clear_clipboard_content {
@@ -166,9 +160,6 @@ be returned instead, or empty string if none exists.
 _
     args => {
         %argspecopt_clipboard_manager,
-    },
-    result => {
-        schema => $sch_clipboard_manager,
     },
 };
 sub get_clipboard_content {
@@ -207,9 +198,6 @@ empty result.
 _
     args => {
         %argspecopt_clipboard_manager,
-    },
-    result => {
-        schema => $sch_clipboard_manager,
     },
 };
 sub list_clipboard_history {
@@ -260,9 +248,6 @@ _
     args => {
         %argspecopt_clipboard_manager,
         content => {schema => 'str*', pos=>0, cmdline_src=>'stdin_or_args'},
-    },
-    result => {
-        schema => $sch_clipboard_manager,
     },
 };
 sub add_clipboard_content {
