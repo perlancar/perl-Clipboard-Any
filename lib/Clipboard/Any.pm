@@ -160,13 +160,13 @@ sub clear_clipboard_history {
 
         my $fh;
 
-        open $fh, "| xclip -i -selection primary"
+        open $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
             or return [500, "xclip -i -selection primary failed (1): $!"];
         print $fh '';
         close $fh
             or return [500, "xclip -i -selection primary failed (2): $!"];
 
-        open $fh, "| xclip -i -selection clipboard"
+        open $fh, "| xclip -i -selection clipboard" ## no critic: InputOutput::ProhibitTwoArgOpen
             or return [500, "xclip -i -selection clipboard failed (1): $!"];
         print $fh '';
         close $fh
@@ -210,7 +210,7 @@ sub clear_clipboard_content {
     } elsif ($clipboard_manager eq 'xclip') {
         # implemented by setting primary to empty string
 
-        open my $fh, "| xclip -i -selection primary"
+        open my $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
             or return [500, "xclip -i -selection primary failed (1): $!"];
         print $fh '';
         close $fh
@@ -416,7 +416,7 @@ sub add_clipboard_content {
         # not as the current one
         return [501, "Not yet implemented"];
     } elsif ($clipboard_manager eq 'xclip') {
-        open my $fh, "| xclip -i -selection primary"
+        open my $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
             or return [500, "xclip -i -selection primary failed (1): $!"];
         print $fh $args{content};
         close $fh

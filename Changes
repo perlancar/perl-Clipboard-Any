@@ -1,3 +1,8 @@
+0.008   2022-12-08  Released-By: PERLANCAR; Urgency: medium
+
+        - Add xclip support.
+
+
 0.007   2022-12-08  Released-By: PERLANCAR; Urgency: medium
 
         - [bugfix] Forgot to add clipit to schema.
