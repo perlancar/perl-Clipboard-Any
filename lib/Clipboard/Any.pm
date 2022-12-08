@@ -61,10 +61,6 @@ _
 sub detect_clipboard_manager {
     my %args = @_;
 
-    #require Proc::Find;
-    #no warnings 'once';
-    #local $Proc::Find::CACHE = 1;
-
   KLIPPER:
     {
         log_trace "Checking whether clipboard manager klipper is running ...";
@@ -85,6 +81,7 @@ sub detect_clipboard_manager {
     }
 
     require Proc::Find;
+    no warnings 'once';
     local $Proc::Find::CACHE = 1;
 
   PARCELLITE:
@@ -96,6 +93,19 @@ sub detect_clipboard_manager {
             return "parcellite";
         } else {
             log_trace "parcellite process does not seem to be running, probably not using parcellite";
+        }
+    }
+
+  CLIPIT:
+    {
+        # basically the same as parcellite
+        log_trace "Checking whether clipboard manager clipit is running ...";
+        my @pids = Proc::Find::find_proc(name => "clipit");
+        if (@pids) {
+            log_trace "clipit process is running, concluding using clipit";
+            return "clipit";
+        } else {
+            log_trace "clipit process does not seem to be running, probably not using clipit";
         }
     }
 
@@ -130,6 +140,8 @@ sub clear_clipboard_history {
         return [200, "OK"];
     } elsif ($clipboard_manager eq 'parcellite') {
         return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'clipit') {
+        return [501, "Not yet implemented"];
     }
 
     [412, "Cannot clear clipboard history (clipboard manager=$clipboard_manager)"];
@@ -161,6 +173,8 @@ sub clear_clipboard_content {
         return [500, "/klipper's clearClipboardContents failed: $exit_code"] if $exit_code;
         return [200, "OK"];
     } elsif ($clipboard_manager eq 'parcellite') {
+        return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'clipit') {
         return [501, "Not yet implemented"];
     }
 
@@ -211,6 +225,13 @@ sub get_clipboard_content {
                "parcellite", "-p");
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "parcellite command failed with exit code $exit_code"] if $exit_code;
+        return [200, "OK", $stdout];
+    } elsif ($clipboard_manager eq 'clipit') {
+        my ($stdout, $stderr);
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "clipit", "-p");
+        my $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "clipit command failed with exit code $exit_code"] if $exit_code;
         return [200, "OK", $stdout];
     }
 
@@ -272,6 +293,9 @@ sub list_clipboard_history {
     } elsif ($clipboard_manager eq 'parcellite') {
         # parcellite -c usually just prints the same result as -p (primary)
         return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'clipit') {
+        # clipit -c usually just prints the same result as -p (primary)
+        return [501, "Not yet implemented"];
     }
 
     [412, "Cannot list clipboard history (clipboard manager=$clipboard_manager)"];
@@ -318,6 +342,10 @@ sub add_clipboard_content {
     } elsif ($clipboard_manager eq 'parcellite') {
         # parcellite cli copies unknown options and stdin to clipboard history
         # but not as the current one
+        return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'clipit') {
+        # clipit cli copies unknown options and stdin to clipboard history but
+        # not as the current one
         return [501, "Not yet implemented"];
     }
 
