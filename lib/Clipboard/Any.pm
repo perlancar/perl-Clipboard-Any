@@ -14,7 +14,7 @@ use IPC::System::Options 'system', 'readpipe', -log=>1;
 # DIST
 # VERSION
 
-my $known_clipboard_managers = [qw/klipper/];
+my $known_clipboard_managers = [qw/klipper parcellite/];
 my $sch_clipboard_manager = ['str', in=>$known_clipboard_managers];
 our %argspecopt_clipboard_manager = (
     clipboard_manager => {
@@ -37,9 +37,9 @@ $SPEC{':package'} = {
 
 This module provides common functions related to clipboard manager.
 
-Supported clipboard manager: KDE Plasma's Klipper (`klipper`). Support for more
-clipboard managers, e.g. on Windows or other Linux desktop environment is
-welcome.
+Supported clipboard manager: KDE Plasma's Klipper (`klipper`), `parcellite`.
+Support for more clipboard managers, e.g. on Windows or other Linux desktop
+environment is welcome.
 
 _
 };
@@ -80,8 +80,23 @@ sub detect_clipboard_manager {
             log_trace "Failed listing org.kde.klipper /klipper methods, system is probably not using klipper";
             last;
         }
-        log_trace "Concluding klipper is active";
+        log_trace "org.kde.klipper/klipper object active, concluding using klipper";
         return "klipper";
+    }
+
+    require Proc::Find;
+    local $Proc::Find::CACHE = 1;
+
+  PARCELLITE:
+    {
+        log_trace "Checking whether clipboard manager parcellite is running ...";
+        my @pids = Proc::Find::find_proc(name => "parcellite");
+        if (@pids) {
+            log_trace "parcellite process is running, concluding using parcellite";
+            return "parcellite";
+        } else {
+            log_trace "parcellite process does not seem to be running, probably not using parcellite";
+        }
     }
 
     log_trace "No known clipboard manager is detected";
@@ -113,6 +128,8 @@ sub clear_clipboard_history {
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's clearClipboardHistory failed: $exit_code"] if $exit_code;
         return [200, "OK"];
+    } elsif ($clipboard_manager eq 'parcellite') {
+        return [501, "Not yet implemented"];
     }
 
     [412, "Cannot clear clipboard history (clipboard manager=$clipboard_manager)"];
@@ -143,6 +160,8 @@ sub clear_clipboard_content {
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's clearClipboardContents failed: $exit_code"] if $exit_code;
         return [200, "OK"];
+    } elsif ($clipboard_manager eq 'parcellite') {
+        return [501, "Not yet implemented"];
     }
 
     [412, "Cannot clear clipboard content (clipboard manager=$clipboard_manager)"];
@@ -185,6 +204,13 @@ sub get_clipboard_content {
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's getClipboardContents failed: $exit_code"] if $exit_code;
         chomp $stdout;
+        return [200, "OK", $stdout];
+    } elsif ($clipboard_manager eq 'parcellite') {
+        my ($stdout, $stderr);
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "parcellite", "-p");
+        my $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "parcellite command failed with exit code $exit_code"] if $exit_code;
         return [200, "OK", $stdout];
     }
 
@@ -243,6 +269,9 @@ sub list_clipboard_history {
             $i++;
         }
         return [200, "OK", \@rows];
+    } elsif ($clipboard_manager eq 'parcellite') {
+        # parcellite -c usually just prints the same result as -p (primary)
+        return [501, "Not yet implemented"];
     }
 
     [412, "Cannot list clipboard history (clipboard manager=$clipboard_manager)"];
@@ -286,6 +315,10 @@ sub add_clipboard_content {
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's setClipboardContents failed: $exit_code"] if $exit_code;
         return [200, "OK"];
+    } elsif ($clipboard_manager eq 'parcellite') {
+        # parcellite cli copies unknown options and stdin to clipboard history
+        # but not as the current one
+        return [501, "Not yet implemented"];
     }
 
     [412, "Cannot add clipboard content (clipboard manager=$clipboard_manager)"];
