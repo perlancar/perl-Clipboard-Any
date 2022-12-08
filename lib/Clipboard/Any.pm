@@ -6,15 +6,14 @@ use warnings;
 use Log::ger;
 
 use Exporter::Rinci qw(import);
-use File::Which qw(which);
-use IPC::System::Options 'system', 'readpipe', -log=>1;
+use IPC::System::Options 'system', 'readpipe', 'run', -log=>1;
 
 # AUTHORITY
 # DATE
 # DIST
 # VERSION
 
-my $known_clipboard_managers = [qw/klipper parcellite clipit/];
+my $known_clipboard_managers = [qw/klipper parcellite clipit xclip/];
 my $sch_clipboard_manager = ['str', in=>$known_clipboard_managers];
 our %argspecopt_clipboard_manager = (
     clipboard_manager => {
@@ -25,6 +24,7 @@ our %argspecopt_clipboard_manager = (
 The default, when left undef, is to detect what clipboard manager is running.
 
 _
+        cmdline_aliases => {m=>{}},
     },
 );
 
@@ -61,10 +61,12 @@ _
 sub detect_clipboard_manager {
     my %args = @_;
 
+    require File::Which;
+
   KLIPPER:
     {
         log_trace "Checking whether clipboard manager klipper is running ...";
-        unless (which "qdbus") {
+        unless (File::Which::which("qdbus")) {
             log_trace "qdbus not found in PATH, system is probably not using klipper";
             last;
         }
@@ -109,6 +111,17 @@ sub detect_clipboard_manager {
         }
     }
 
+  XCLIP:
+    {
+        log_trace "Checking whether xclip is available ...";
+        unless (File::Which::which("xclip")) {
+            log_trace "xclip not found in PATH, skipping choosing xclip";
+            last;
+        }
+        log_trace "xclip found in PATH, concluding using xclip";
+        return "xclip";
+    }
+
     log_trace "No known clipboard manager is detected";
     undef;
 }
@@ -142,6 +155,24 @@ sub clear_clipboard_history {
         return [501, "Not yet implemented"];
     } elsif ($clipboard_manager eq 'clipit') {
         return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'xclip') {
+        # implemented by setting both primary and clipboard to empty string
+
+        my $fh;
+
+        open $fh, "| xclip -i -selection primary"
+            or return [500, "xclip -i -selection primary failed (1): $!"];
+        print $fh '';
+        close $fh
+            or return [500, "xclip -i -selection primary failed (2): $!"];
+
+        open $fh, "| xclip -i -selection clipboard"
+            or return [500, "xclip -i -selection clipboard failed (1): $!"];
+        print $fh '';
+        close $fh
+            or return [500, "xclip -i -selection clipboard failed (2): $!"];
+
+        return [200, "OK"];
     }
 
     [412, "Cannot clear clipboard history (clipboard manager=$clipboard_manager)"];
@@ -176,6 +207,16 @@ sub clear_clipboard_content {
         return [501, "Not yet implemented"];
     } elsif ($clipboard_manager eq 'clipit') {
         return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'xclip') {
+        # implemented by setting primary to empty string
+
+        open my $fh, "| xclip -i -selection primary"
+            or return [500, "xclip -i -selection primary failed (1): $!"];
+        print $fh '';
+        close $fh
+            or return [500, "xclip -i -selection primary failed (2): $!"];
+
+        return [200, "OK"];
     }
 
     [412, "Cannot clear clipboard content (clipboard manager=$clipboard_manager)"];
@@ -232,6 +273,13 @@ sub get_clipboard_content {
                "clipit", "-p");
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "clipit command failed with exit code $exit_code"] if $exit_code;
+        return [200, "OK", $stdout];
+    } elsif ($clipboard_manager eq 'xclip') {
+        my ($stdout, $stderr);
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "xclip", "-o", "-selection", "primary");
+        my $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "xclip -o failed with exit code $exit_code"] if $exit_code;
         return [200, "OK", $stdout];
     }
 
@@ -296,6 +344,23 @@ sub list_clipboard_history {
     } elsif ($clipboard_manager eq 'clipit') {
         # clipit -c usually just prints the same result as -p (primary)
         return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'xclip') {
+        my ($stdout, $stderr, $exit_code);
+        my @rows;
+
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "xclip", "-o", "-selection", "primary");
+        $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "xclip -o (primary) failed with exit code $exit_code"] if $exit_code;
+        push @rows, $stdout;
+
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "xclip", "-o", "-selection", "clipboard");
+        $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "xclip -o (clipboard) failed with exit code $exit_code"] if $exit_code;
+        push @rows, $stdout;
+
+        return [200, "OK", \@rows];
     }
 
     [412, "Cannot list clipboard history (clipboard manager=$clipboard_manager)"];
@@ -305,6 +370,9 @@ $SPEC{'add_clipboard_content'} = {
     v => 1.1,
     summary => 'Add a new content to the clipboard',
     description => <<'_',
+
+For `xclip`: when adding content, the primary selection is set. The clipboard
+content is unchanged.
 
 _
     args => {
@@ -347,6 +415,13 @@ sub add_clipboard_content {
         # clipit cli copies unknown options and stdin to clipboard history but
         # not as the current one
         return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'xclip') {
+        open my $fh, "| xclip -i -selection primary"
+            or return [500, "xclip -i -selection primary failed (1): $!"];
+        print $fh $args{content};
+        close $fh
+            or return [500, "xclip -i -selection primary failed (2): $!"];
+        return [200, "OK"];
     }
 
     [412, "Cannot add clipboard content (clipboard manager=$clipboard_manager)"];
@@ -376,6 +451,23 @@ item/content is at index 0, the secondmost current item is at index 1, and so
 on.
 
 =back
+
+
+=head2 Supported clipboard managers
+
+=head3 Klipper
+
+The default clipboard manager on KDE Plasma.
+
+=head3 clipit
+
+=head3 parcellite
+
+=head3 xclip
+
+This is not a "real" clipboard manager, but just an interface to the X
+selections. With C<xclip>, the history is viewed as having two items. The
+first/recent is the primary selection and the second one is the secondary.
 
 
 =head1 NOTES
