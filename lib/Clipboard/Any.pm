@@ -28,6 +28,19 @@ _
     },
 );
 
+our %argspec0_index = (
+    index => {
+        summary => 'Index of item in history (0 means the current/latest, 1 the second latest, and so on)',
+        schema => 'int*',
+        description => <<'_',
+
+If the index exceeds the number of items in history, empty string or undef will
+be returned instead.
+
+_
+    },
+);
+
 our %SPEC;
 
 $SPEC{':package'} = {
@@ -364,6 +377,63 @@ sub list_clipboard_history {
     }
 
     [412, "Cannot list clipboard history (clipboard manager=$clipboard_manager)"];
+}
+
+$SPEC{'get_clipboard_history_item'} = {
+    v => 1.1,
+    summary => 'Get a clipboard history item',
+    description => <<'_',
+
+_
+    args => {
+        %argspecopt_clipboard_manager,
+        %argspec0_index,
+    },
+};
+sub get_clipboard_history_item {
+    my %args = @_;
+    my $index = $args{index};
+
+    my $clipboard_manager = $args{clipboard_manager} // detect_clipboard_manager();
+    return [412, "Can't detect any known clipboard manager"]
+        unless $clipboard_manager;
+
+    if ($clipboard_manager eq 'klipper') {
+        my ($stdout, $stderr);
+        system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+               "qdbus", "org.kde.klipper", "/klipper", "getClipboardHistoryItem", $index);
+        my $exit_code = $? < 0 ? $? : $?>>8;
+        return [500, "/klipper's getClipboardHistoryItem($index) failed: $exit_code"] if $exit_code;
+        chomp $stdout;
+        return [200, "OK", $stdout];
+    } elsif ($clipboard_manager eq 'parcellite') {
+        # parcellite -c usually just prints the same result as -p (primary)
+        return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'clipit') {
+        # clipit -c usually just prints the same result as -p (primary)
+        return [501, "Not yet implemented"];
+    } elsif ($clipboard_manager eq 'xclip') {
+        my ($stdout, $stderr, $exit_code);
+        my @rows;
+
+        if ($index == 0) {
+            system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+                   "xclip", "-o", "-selection", "primary");
+            $exit_code = $? < 0 ? $? : $?>>8;
+            return [500, "xclip -o (primary) failed with exit code $exit_code"] if $exit_code;
+            return [200, "OK", $stdout];
+        } elsif ($index == 0) {
+            system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
+                   "xclip", "-o", "-selection", "clipboard");
+            $exit_code = $? < 0 ? $? : $?>>8;
+            return [500, "xclip -o (clipboard) failed with exit code $exit_code"] if $exit_code;
+            return [200, "OK", $stdout];
+        } else {
+            return [200, "OK", undef];
+        }
+    }
+
+    [412, "Cannot get clipboard history item (clipboard manager=$clipboard_manager)"];
 }
 
 $SPEC{'add_clipboard_content'} = {
