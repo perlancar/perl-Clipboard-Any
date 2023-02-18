@@ -50,9 +50,9 @@ $SPEC{':package'} = {
 
 This module provides common functions related to clipboard manager.
 
-Supported clipboard manager: KDE Plasma's Klipper (`klipper`), `parcellite`.
-Support for more clipboard managers, e.g. on Windows or other Linux desktop
-environment is welcome.
+Supported clipboard manager: KDE Plasma's Klipper (`klipper`), `parcellite`,
+`clipit`, `xclip`. Support for more clipboard managers, e.g. on Windows or other
+Linux desktop environment is welcome.
 
 _
 };
