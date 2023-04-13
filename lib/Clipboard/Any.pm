@@ -447,7 +447,15 @@ content is unchanged.
 _
     args => {
         %argspecopt_clipboard_manager,
-        content => {schema => 'str*', pos=>0, cmdline_src=>'stdin_or_args'},
+        content => {
+            schema => 'str*',
+            pos=>0,
+            cmdline_src=>'stdin_or_args',
+        },
+        tee => {
+            summary => 'If set to true, will output content back to STDOUT',
+            schema => 'bool*',
+        },
     },
     examples => [
         {
@@ -476,6 +484,7 @@ sub add_clipboard_content {
                "qdbus", "org.kde.klipper", "/klipper", "setClipboardContents", $args{content});
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's setClipboardContents failed: $exit_code"] if $exit_code;
+        print $args{content} if $args{tee};
         return [200, "OK"];
     } elsif ($clipboard_manager eq 'parcellite') {
         # parcellite cli copies unknown options and stdin to clipboard history
@@ -491,6 +500,7 @@ sub add_clipboard_content {
         print $fh $args{content};
         close $fh
             or return [500, "xclip -i -selection primary failed (2): $!"];
+        print $args{content} if $args{tee};
         return [200, "OK"];
     }
 
