@@ -13,8 +13,8 @@ use IPC::System::Options 'system', 'readpipe', 'run', -log=>1;
 # DIST
 # VERSION
 
-my $known_clipboard_managers = [qw/klipper parcellite clipit xclip/];
-my $sch_clipboard_manager = ['str', in=>$known_clipboard_managers];
+our $known_clipboard_managers = [qw/klipper parcellite clipit xclip/];
+our $sch_clipboard_manager = ['str', in=>$known_clipboard_managers];
 our %argspecopt_clipboard_manager = (
     clipboard_manager => {
         summary => 'Explicitly set clipboard manager to use',
