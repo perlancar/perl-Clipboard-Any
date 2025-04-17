@@ -83,21 +83,50 @@ sub detect_clipboard_manager {
   KLIPPER:
     {
         log_trace "Checking whether clipboard manager klipper is running ...";
-        unless (File::Which::which("qdbus")) {
-            log_trace "qdbus not found in PATH, system is probably not using klipper";
-            last;
+
+        METHOD1: {
+              my @paths;
+              if (my $path = File::Which::which("qdbus")) {
+                  log_trace "qdbus found in PATH: $path";
+                  push @paths, $path;
+              } else {
+                  for my $dir ("/usr/lib/qt6/bin", "/usr/lib/qt5/bin") {
+                      if ((-d $dir) && (-x "$dir/qdbus")) {
+                          log_trace "qdbus found in $dir";
+                          push @paths, "$dir/qdbus";
+                      }
+                  }
+              }
+
+              unless (@paths) {
+                  log_trace "qdbus not found (tried PATH, ".join(", ", @paths)."), skipped checking using qdbus";
+                  last;
+              }
+
+              for my $path (@paths) {
+                  my $out;
+                  system({capture_merged=>\$out}, $path, "org.kde.klipper", "/klipper");
+                  unless ($? == 0) {
+                      # note, when klipper is disabled via System Tray Settings >
+                      # General > Extra Items, the object path /klipper disappears.
+                      log_trace "Failed listing org.kde.klipper /klipper methods (using qdus at $path)";
+                      next;
+                  }
+                  log_trace "org.kde.klipper/klipper object active, concluding using klipper";
+                  return "klipper";
+              }
+          }
+
+      METHOD2: {
+            my $pids = Proc::Find::find_proc(name => "dbus-daemon");
+            if (@$pids) {
+                log_trace "There is dbus-daemon running, assuming we are using klipper";
+                return "klipper";
+            } else {
+                log_trace "dbus-daemon process does not seem to be running, probably not using klipper";
+            }
         }
-        my $out;
-        system({capture_merged=>\$out}, "qdbus", "org.kde.klipper", "/klipper");
-        unless ($? == 0) {
-            # note, when klipper is disabled via System Tray Settings > General
-            # > Extra Items, the object path /klipper disappears.
-            log_trace "Failed listing org.kde.klipper /klipper methods, system is probably not using klipper";
-            last;
-        }
-        log_trace "org.kde.klipper/klipper object active, concluding using klipper";
-        return "klipper";
-    }
+    } # KLIPPER
 
   PARCELLITE:
     {
@@ -109,7 +138,7 @@ sub detect_clipboard_manager {
         } else {
             log_trace "parcellite process does not seem to be running, probably not using parcellite";
         }
-    }
+    } # PARCELLITE
 
   CLIPIT:
     {
@@ -122,7 +151,7 @@ sub detect_clipboard_manager {
         } else {
             log_trace "clipit process does not seem to be running, probably not using clipit";
         }
-    }
+    } # CLIPIT
 
   XCLIP:
     {
@@ -133,7 +162,7 @@ sub detect_clipboard_manager {
         }
         log_trace "xclip found in PATH, concluding using xclip";
         return "xclip";
-    }
+    } # XCLIP
 
     log_trace "No known clipboard manager is detected";
     undef;
