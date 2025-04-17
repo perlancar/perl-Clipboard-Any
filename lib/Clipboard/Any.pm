@@ -43,6 +43,25 @@ MARKDOWN
 
 our %SPEC;
 
+sub _find_qdbus {
+    require File::Which;
+
+    my @paths;
+    if (my $path = File::Which::which("qdbus")) {
+        log_trace "qdbus found in PATH: $path";
+        push @paths, $path;
+    } else {
+        for my $dir ("/usr/lib/qt6/bin", "/usr/lib/qt5/bin") {
+            if ((-d $dir) && (-x "$dir/qdbus")) {
+                log_trace "qdbus found in $dir";
+                push @paths, "$dir/qdbus";
+            }
+        }
+    }
+
+    @paths;
+}
+
 $SPEC{':package'} = {
     v => 1.1,
     summary => 'Common interface to clipboard manager functions',
@@ -67,9 +86,15 @@ Will return a string containing name of clipboard manager program, e.g.
 
 MARKDOWN
     result_naked => 1,
-    result => {
-        schema => $sch_clipboard_manager,
+    args => {
+        detail => {
+            schema => 'bool*',
+            cmdline_aliases => {l=>{}},
+        },
     },
+    #result => {
+    #    schema => $sch_clipboard_manager,
+    #},
 };
 sub detect_clipboard_manager {
     my %args = @_;
@@ -80,92 +105,98 @@ sub detect_clipboard_manager {
     no warnings 'once';
     local $Proc::Find::CACHE = 1;
 
-  KLIPPER:
-    {
-        log_trace "Checking whether clipboard manager klipper is running ...";
+    my $info = {};
+  DETECT: {
 
-        METHOD1: {
-              my @paths;
-              if (my $path = File::Which::which("qdbus")) {
-                  log_trace "qdbus found in PATH: $path";
-                  push @paths, $path;
-              } else {
-                  for my $dir ("/usr/lib/qt6/bin", "/usr/lib/qt5/bin") {
-                      if ((-d $dir) && (-x "$dir/qdbus")) {
-                          log_trace "qdbus found in $dir";
-                          push @paths, "$dir/qdbus";
-                      }
-                  }
-              }
+      DETECT_KLIPPER:
+        {
+            log_trace "Checking whether clipboard manager klipper is running ...";
 
-              unless (@paths) {
-                  log_trace "qdbus not found (tried PATH, ".join(", ", @paths)."), skipped checking using qdbus";
-                  last;
-              }
+          METHOD1: {
+                my @paths = _find_qdbus();
 
-              for my $path (@paths) {
-                  my $out;
-                  system({capture_merged=>\$out}, $path, "org.kde.klipper", "/klipper");
-                  unless ($? == 0) {
-                      # note, when klipper is disabled via System Tray Settings >
-                      # General > Extra Items, the object path /klipper disappears.
-                      log_trace "Failed listing org.kde.klipper /klipper methods (using qdus at $path)";
-                      next;
-                  }
-                  log_trace "org.kde.klipper/klipper object active, concluding using klipper";
-                  return "klipper";
-              }
+                unless (@paths) {
+                    log_trace "qdbus not found, checking using qdbus";
+                    last;
+                }
+
+                for my $path (@paths) {
+                    my $out;
+                    system({capture_merged=>\$out}, $path, "org.kde.klipper", "/klipper");
+                    unless ($? == 0) {
+                        # note, when klipper is disabled via System Tray Settings >
+                        # General > Extra Items, the object path /klipper disappears.
+                        log_trace "Failed listing org.kde.klipper /klipper methods (using qdus at $path)";
+                        next;
+                    }
+                    log_trace "org.kde.klipper/klipper object active, concluding using klipper";
+                    $info->{manager} = "klipper";
+                    $info->{klipper_path} = $path;
+                    last DETECT;
+                }
           }
 
-      METHOD2: {
-            my $pids = Proc::Find::find_proc(name => "dbus-daemon");
+          # we need qdbus anyway
+          #METHOD2: {
+          #      my $pids = Proc::Find::find_proc(name => "dbus-daemon");
+          #      if (@$pids) {
+          #          log_trace "There is dbus-daemon running, assuming we are using klipper";
+          #          $info->{manager} = "klipper";
+          #          last DETECT;
+          #  } else {
+          #      log_trace "dbus-daemon process does not seem to be running, probably not using klipper";
+          #  }
+          #}
+        } # DETECT_KLIPPER
+
+      DETECT_PARCELLITE:
+        {
+            log_trace "Checking whether clipboard manager parcellite is running ...";
+            my $pids = Proc::Find::find_proc(name => "parcellite");
             if (@$pids) {
-                log_trace "There is dbus-daemon running, assuming we are using klipper";
-                return "klipper";
+                log_trace "parcellite process is running, concluding using parcellite";
+                $info->{manager} = "parcellite";
+                last DETECT;
             } else {
-                log_trace "dbus-daemon process does not seem to be running, probably not using klipper";
+                log_trace "parcellite process does not seem to be running, probably not using parcellite";
             }
-        }
-    } # KLIPPER
+        } # DETECT_PARCELLITE
 
-  PARCELLITE:
-    {
-        log_trace "Checking whether clipboard manager parcellite is running ...";
-        my $pids = Proc::Find::find_proc(name => "parcellite");
-        if (@$pids) {
-            log_trace "parcellite process is running, concluding using parcellite";
-            return "parcellite";
-        } else {
-            log_trace "parcellite process does not seem to be running, probably not using parcellite";
-        }
-    } # PARCELLITE
+      DETECT_CLIPIT:
+        {
+            # basically the same as parcellite
+            log_trace "Checking whether clipboard manager clipit is running ...";
+            my $pids = Proc::Find::find_proc(name => "clipit");
+            if (@$pids) {
+                log_trace "clipit process is running, concluding using clipit";
+                $info->{manager} = "parcellite";
+                last DETECT;
+            } else {
+                log_trace "clipit process does not seem to be running, probably not using clipit";
+            }
+        } # DETECT_CLIPIT
 
-  CLIPIT:
-    {
-        # basically the same as parcellite
-        log_trace "Checking whether clipboard manager clipit is running ...";
-        my $pids = Proc::Find::find_proc(name => "clipit");
-        if (@$pids) {
-            log_trace "clipit process is running, concluding using clipit";
-            return "clipit";
-        } else {
-            log_trace "clipit process does not seem to be running, probably not using clipit";
-        }
-    } # CLIPIT
+      DETECT_XCLIP:
+        {
+            log_trace "Checking whether xclip is available ...";
+            my $path = File::Which::which("xclip");
+            unless ($path) {
+                log_trace "xclip not found in PATH, skipping choosing xclip";
+                last;
+            }
+            log_trace "xclip found in PATH, concluding using xclip";
+            $info->{manager} = "xclip";
+            $info->{xclip_path} = $path;
+        } # DETECT_XCLIP
 
-  XCLIP:
-    {
-        log_trace "Checking whether xclip is available ...";
-        unless (File::Which::which("xclip")) {
-            log_trace "xclip not found in PATH, skipping choosing xclip";
-            last;
-        }
-        log_trace "xclip found in PATH, concluding using xclip";
-        return "xclip";
-    } # XCLIP
+        log_trace "No known clipboard manager is detected";
+    } # DETECT
 
-    log_trace "No known clipboard manager is detected";
-    undef;
+    if ($args{detail}) {
+        $info;
+    } else {
+        $info->{manager};
+    }
 }
 
 $SPEC{'clear_clipboard_history'} = {
@@ -186,10 +217,12 @@ sub clear_clipboard_history {
         unless $clipboard_manager;
 
     if ($clipboard_manager eq 'klipper') {
+        my @paths = _find_qdbus();
+        die "Can't find qdbus" unless @paths;
         my ($stdout, $stderr);
         # qdbus likes to emit an empty line
         system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
-               "qdbus", "org.kde.klipper", "/klipper", "clearClipboardHistory");
+               $paths[0], "org.kde.klipper", "/klipper", "clearClipboardHistory");
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's clearClipboardHistory failed: $exit_code"] if $exit_code;
         return [200, "OK"];
@@ -238,10 +271,12 @@ sub clear_clipboard_content {
         unless $clipboard_manager;
 
     if ($clipboard_manager eq 'klipper') {
+        my @paths = _find_qdbus();
+        die "Can't find qdbus" unless @paths;
         my ($stdout, $stderr);
         # qdbus likes to emit an empty line
         system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
-               "qdbus", "org.kde.klipper", "/klipper", "clearClipboardContents");
+               $paths[0], "org.kde.klipper", "/klipper", "clearClipboardContents");
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's clearClipboardContents failed: $exit_code"] if $exit_code;
         return [200, "OK"];
@@ -295,9 +330,11 @@ sub get_clipboard_content {
         unless $clipboard_manager;
 
     if ($clipboard_manager eq 'klipper') {
+        my @paths = _find_qdbus();
+        die "Can't find qdbus" unless @paths;
         my ($stdout, $stderr);
         system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
-               "qdbus", "org.kde.klipper", "/klipper", "getClipboardContents");
+               $paths[0], "org.kde.klipper", "/klipper", "getClipboardContents");
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's getClipboardContents failed: $exit_code"] if $exit_code;
         chomp $stdout;
@@ -354,13 +391,15 @@ sub list_clipboard_history {
         unless $clipboard_manager;
 
     if ($clipboard_manager eq 'klipper') {
+        my @paths = _find_qdbus();
+        die "Can't find qdbus" unless @paths;
         my @rows;
         my $i = 0;
         my $got_empty;
         while (1) {
             my ($stdout, $stderr);
             system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
-               "qdbus", "org.kde.klipper", "/klipper", "getClipboardHistoryItem", $i);
+               $paths[0], "org.kde.klipper", "/klipper", "getClipboardHistoryItem", $i);
             my $exit_code = $? < 0 ? $? : $?>>8;
             return [500, "/klipper's getClipboardHistoryItem($i) failed: $exit_code"] if $exit_code;
             chomp $stdout;
@@ -428,9 +467,11 @@ sub get_clipboard_history_item {
         unless $clipboard_manager;
 
     if ($clipboard_manager eq 'klipper') {
+        my @paths = _find_qdbus();
+        die "Can't find qdbus" unless @paths;
         my ($stdout, $stderr);
         system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
-               "qdbus", "org.kde.klipper", "/klipper", "getClipboardHistoryItem", $index);
+               $paths[0], "org.kde.klipper", "/klipper", "getClipboardHistoryItem", $index);
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's getClipboardHistoryItem($index) failed: $exit_code"] if $exit_code;
         chomp $stdout;
@@ -507,10 +548,12 @@ sub add_clipboard_content {
         return [400, "Please specify content"];
 
     if ($clipboard_manager eq 'klipper') {
+        my @paths = _find_qdbus();
+        die "Can't find qdbus" unless @paths;
         my ($stdout, $stderr);
         # qdbus likes to emit an empty line
         system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
-               "qdbus", "org.kde.klipper", "/klipper", "setClipboardContents", $args{content});
+               $paths[0], "org.kde.klipper", "/klipper", "setClipboardContents", $args{content});
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's setClipboardContents failed: $exit_code"] if $exit_code;
         print $args{content} if $args{tee};
