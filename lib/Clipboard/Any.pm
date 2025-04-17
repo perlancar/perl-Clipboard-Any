@@ -76,6 +76,10 @@ sub detect_clipboard_manager {
 
     require File::Which;
 
+    require Proc::Find;
+    no warnings 'once';
+    local $Proc::Find::CACHE = 1;
+
   KLIPPER:
     {
         log_trace "Checking whether clipboard manager klipper is running ...";
@@ -95,15 +99,11 @@ sub detect_clipboard_manager {
         return "klipper";
     }
 
-    require Proc::Find;
-    no warnings 'once';
-    local $Proc::Find::CACHE = 1;
-
   PARCELLITE:
     {
         log_trace "Checking whether clipboard manager parcellite is running ...";
-        my @pids = Proc::Find::find_proc(name => "parcellite");
-        if (@pids) {
+        my $pids = Proc::Find::find_proc(name => "parcellite");
+        if (@$pids) {
             log_trace "parcellite process is running, concluding using parcellite";
             return "parcellite";
         } else {
@@ -115,8 +115,8 @@ sub detect_clipboard_manager {
     {
         # basically the same as parcellite
         log_trace "Checking whether clipboard manager clipit is running ...";
-        my @pids = Proc::Find::find_proc(name => "clipit");
-        if (@pids) {
+        my $pids = Proc::Find::find_proc(name => "clipit");
+        if (@$pids) {
             log_trace "clipit process is running, concluding using clipit";
             return "clipit";
         } else {
