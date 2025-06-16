@@ -525,6 +525,12 @@ MARKDOWN
         tee => {
             summary => 'If set to true, will output content back to STDOUT',
             schema => 'bool*',
+            cmdline_aliases => {t=>{}},
+        },
+        chomp_newline => {
+            summary => 'Remove trailing newlines before adding item to clipboard',
+            schema => 'bool*',
+            cmdline_aliases => {l=>{}},
         },
     },
     examples => [
@@ -547,16 +553,20 @@ sub add_clipboard_content {
     defined $args{content} or
         return [400, "Please specify content"];
 
+    my $content0 = $args{content};
+    my $content = $content0;
+    $content =~ s/\R+\z// if $args{chomp_newline};
+
     if ($clipboard_manager eq 'klipper') {
         my @paths = _find_qdbus();
         die "Can't find qdbus" unless @paths;
         my ($stdout, $stderr);
         # qdbus likes to emit an empty line
         system({capture_stdout=>\$stdout, capture_stderr=>\$stderr},
-               $paths[0], "org.kde.klipper", "/klipper", "setClipboardContents", $args{content});
+               $paths[0], "org.kde.klipper", "/klipper", "setClipboardContents", $content);
         my $exit_code = $? < 0 ? $? : $?>>8;
         return [500, "/klipper's setClipboardContents failed: $exit_code"] if $exit_code;
-        print $args{content} if $args{tee};
+        print $content0 if $args{tee};
         return [200, "OK"];
     } elsif ($clipboard_manager eq 'parcellite') {
         # parcellite cli copies unknown options and stdin to clipboard history
@@ -569,10 +579,10 @@ sub add_clipboard_content {
     } elsif ($clipboard_manager eq 'xclip') {
         open my $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
             or return [500, "xclip -i -selection primary failed (1): $!"];
-        print $fh $args{content};
+        print $fh $content;
         close $fh
             or return [500, "xclip -i -selection primary failed (2): $!"];
-        print $args{content} if $args{tee};
+        print $content0 if $args{tee};
         return [200, "OK"];
     }
 
