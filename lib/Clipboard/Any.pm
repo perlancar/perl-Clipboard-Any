@@ -43,25 +43,6 @@ MARKDOWN
 
 our %SPEC;
 
-sub _find_qdbus {
-    require File::Which;
-
-    my @paths;
-    if (my $path = File::Which::which("qdbus")) {
-        log_trace "qdbus found in PATH: $path";
-        push @paths, $path;
-    } else {
-        for my $dir ("/usr/lib/qt6/bin", "/usr/lib/qt5/bin") {
-            if ((-d $dir) && (-x "$dir/qdbus")) {
-                log_trace "qdbus found in $dir";
-                push @paths, "$dir/qdbus";
-            }
-        }
-    }
-
-    @paths;
-}
-
 $SPEC{':package'} = {
     v => 1.1,
     summary => 'Common interface to clipboard manager functions',
@@ -113,14 +94,15 @@ sub detect_clipboard_manager {
             log_trace "Checking whether clipboard manager klipper is running ...";
 
           METHOD1: {
-                my @paths = _find_qdbus();
+                require Desktop::KDE::Util;
+                my $paths = Desktop::KDE::Util::which_qdbus();
 
-                unless (@paths) {
+                unless (@$paths) {
                     log_trace "qdbus not found, checking using qdbus";
                     last;
                 }
 
-                for my $path (@paths) {
+                for my $path (@$paths) {
                     my $out;
                     system({capture_merged=>\$out}, $path, "org.kde.klipper", "/klipper");
                     unless ($? == 0) {
