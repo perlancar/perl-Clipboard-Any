@@ -268,13 +268,19 @@ sub clear_clipboard_content {
     } elsif ($clipboard_manager eq 'clipit') {
         return [501, "Not yet implemented"];
     } elsif ($clipboard_manager eq 'xclip') {
-        # implemented by setting primary to empty string
+        # implemented by setting both primary and clipboard to empty string
 
-        open my $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
+        my $fh;
+        open $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
             or return [500, "xclip -i -selection primary failed (1): $!"];
         print $fh '';
         close $fh
             or return [500, "xclip -i -selection primary failed (2): $!"];
+        open $fh, "| xclip -i -selection clipboard" ## no critic: InputOutput::ProhibitTwoArgOpen
+            or return [500, "xclip -i -selection clipboard failed (1): $!"];
+        print $fh '';
+        close $fh
+            or return [500, "xclip -i -selection clipboard failed (2): $!"];
 
         return [200, "OK"];
     }
@@ -560,11 +566,18 @@ sub add_clipboard_content {
         # not as the current one
         return [501, "Not yet implemented"];
     } elsif ($clipboard_manager eq 'xclip') {
-        open my $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
+        my $fh;
+
+        open $fh, "| xclip -i -selection primary" ## no critic: InputOutput::ProhibitTwoArgOpen
             or return [500, "xclip -i -selection primary failed (1): $!"];
         print $fh $content;
         close $fh
             or return [500, "xclip -i -selection primary failed (2): $!"];
+        open $fh, "| xclip -i -selection clipboard" ## no critic: InputOutput::ProhibitTwoArgOpen
+            or return [500, "xclip -i -selection clipboard failed (1): $!"];
+        print $fh $content;
+        close $fh
+            or return [500, "xclip -i -selection clipboard failed (2): $!"];
         print $content0 if $args{tee};
         return [200, "OK"];
     }
